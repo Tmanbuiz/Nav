@@ -3,9 +3,6 @@
  * Runs the real storage code and SQL against SQLite (Node's built-in engine) through a
  * small adapter with expo-sqlite's async method names. Made-up riders only.
  */
-import type { SQLiteDatabase } from 'expo-sqlite';
-import { DatabaseSync } from 'node:sqlite';
-
 import { approveRide, importText, suggestDayOrder } from '@/services/rides';
 
 import {
@@ -13,6 +10,7 @@ import {
   countInbox,
   exportAll,
   getRegular,
+  isInvocationProcessed,
   listOpenNotices,
   listRegulars,
   listRidesByStatus,
@@ -21,10 +19,12 @@ import {
   saveRegularSpot,
   setTripOrder,
   setTripStatus,
+  setTripStatusOnce,
   stopPoint,
   updateRegular,
 } from './repo';
 import { migrate } from './schema';
+import { openTestDb } from './test-db';
 import { loadSettings, saveSettings } from './settings';
 
 jest.mock('@/services/geo', () => ({
@@ -40,33 +40,6 @@ jest.mock('@/services/geo', () => ({
   }),
   currentSpot: jest.fn(),
 }));
-
-function openTestDb(): SQLiteDatabase {
-  const raw = new DatabaseSync(':memory:');
-  const args = (params: unknown[]) => (params.length === 1 && Array.isArray(params[0]) ? params[0] : params) as never[];
-  const db = {
-    execAsync: async (sql: string) => {
-      raw.exec(sql);
-    },
-    runAsync: async (sql: string, ...params: unknown[]) => {
-      const r = raw.prepare(sql).run(...args(params));
-      return { lastInsertRowId: Number(r.lastInsertRowid), changes: Number(r.changes) };
-    },
-    getAllAsync: async (sql: string, ...params: unknown[]) => raw.prepare(sql).all(...args(params)),
-    getFirstAsync: async (sql: string, ...params: unknown[]) => raw.prepare(sql).get(...args(params)) ?? null,
-    withTransactionAsync: async (task: () => Promise<void>) => {
-      raw.exec('BEGIN');
-      try {
-        await task();
-        raw.exec('COMMIT');
-      } catch (e) {
-        raw.exec('ROLLBACK');
-        throw e;
-      }
-    },
-  };
-  return db as unknown as SQLiteDatabase;
-}
 
 const FOOTER = 'View Location on Google Maps Provide updates through the Church App . Kind regards, Church Administration Team';
 const DATE = '2099-11-22';
@@ -95,7 +68,7 @@ test('migrations run once and are idempotent', async () => {
   const db = await setup();
   await migrate(db);
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  expect(version?.user_version).toBe(1);
+  expect(version?.user_version).toBe(2);
 });
 
 test('import → review → approve → today’s trips, end to end', async () => {
@@ -161,6 +134,37 @@ test('texts arriving together import one at a time without clashing', async () =
   expect(first.duplicates + second.duplicates).toBe(1);
   expect(other.created).toBe(1);
   expect(await listRidesByStatus(db, 'review')).toHaveLength(2);
+});
+
+test('Siri and Shortcut actions apply once, even when delivered twice', async () => {
+  const db = await setup();
+  const NOTHING = { created: 0, changed: 0, duplicates: 0, notices: 0, ignored: 0 };
+
+  // The import and its action ID are saved together, so a second delivery is skipped outright.
+  const add = { id: 'action-1', name: 'addAssignmentText' };
+  expect((await importText(db, JANE, 'shortcut', add)).created).toBe(1);
+  expect(await isInvocationProcessed(db, 'action-1')).toBe(true);
+  expect(await importText(db, JANE, 'shortcut', add)).toEqual(NOTHING);
+
+  const jane = (await listRidesByStatus(db, 'review'))[0]!;
+  expect(jane.source).toBe('shortcut');
+  expect(await approveRide(db, jane.id)).toEqual({ ok: true });
+
+  // "Picked up" applies once. If the driver then undoes it in the app, a late copy of the
+  // same action must not mark it done again.
+  const pickedUp = { assignmentId: jane.id, leg: 'to-church' as const, status: 'done' as const, invocationId: 'action-2' };
+  expect(await setTripStatusOnce(db, pickedUp)).toBe('applied');
+  expect((await listTripsForDate(db, DATE)).find((t) => t.leg === 'to-church')?.status).toBe('done');
+  await setTripStatus(db, jane.id, 'to-church', 'pending');
+  expect(await setTripStatusOnce(db, pickedUp)).toBe('already-applied');
+  const trip = (await listTripsForDate(db, DATE)).find((t) => t.leg === 'to-church');
+  expect(trip?.status).toBe('pending');
+  expect(trip?.updatedAt).not.toBe('');
+
+  // An action for a ride that's gone is still recorded, so it isn't retried forever.
+  const gone = { ...pickedUp, assignmentId: 'no-such-ride', invocationId: 'action-3' };
+  expect(await setTripStatusOnce(db, gone)).toBe('no-such-trip');
+  expect(await isInvocationProcessed(db, 'action-3')).toBe(true);
 });
 
 test('a saved door spot is used for routing and cleared when the address changes', async () => {

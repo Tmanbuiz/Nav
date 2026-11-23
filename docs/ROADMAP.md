@@ -10,6 +10,7 @@ Updated 2026-11-23. This replaces the earlier 12-phase Codex roadmap with thin, 
 - **Review before anything reaches the run.** Imports land in the Inbox, and approving is explicit.
 - **Regulars.** Riders are matched by phone number. Their exact pickup spot is saved once, by standing at the door and tapping "Save where I am now".
 - **Maps.** Apple Maps by default (multi-stop links, iOS 18.4+), Google Maps as an option. Neither reorders stops, so ChurchRide suggests the order and you can adjust it.
+- **Siri and Shortcuts through `expo-app-intents` (alpha).** Swift intents can't call JavaScript directly, so they queue each action on the phone and the app applies it the next time it runs, exactly once. Siri reads the run from a small stop list the app publishes, so it can answer while the app is closed.
 - **Safety checks:**
   - a building instead of a street address
   - an address in another province, or a pickup more than 60 km from the church (held once, until approved again)
@@ -35,20 +36,25 @@ Updated 2026-11-23. This replaces the earlier 12-phase Codex roadmap with thin, 
   - the storage layer on real SQLite
   - the Worker inside the Workers runtime
 
+## Built, waiting for a test on the iPhone (v2)
+
+- **Silent auto-import:** the Shortcuts action "Add Assignment Text" for the Message automation. The app doesn't open, it works while the phone is locked, and texts land in the Inbox for review.
+- **Siri while driving:** "Next stop in ChurchRide" and "Picked up in ChurchRide" / "Dropped off in ChurchRide".
+- **Tests:** each action applies once even when delivered twice; the stop list Siri reads.
+- The Swift hasn't been compiled yet: CI can't, so the first EAS build is the check.
+
 ## Next
 
-1. **Use it on a real Sunday.** Note anything the parser flags wrongly, and send a made-up copy of any new text format.
-2. **Silent auto-import + Siri** with `expo-app-intents` (alpha):
-   - an "Add assignment" action for the Message automation, so the app doesn't open and it works while the phone is locked
-   - "Next stop" and "Picked up" Siri commands while driving
-   - needs Swift intent definitions and a development build
-3. **Share sheet.** Receive shared texts and screenshots from WhatsApp, Mail and Photos.
-4. **Screenshot reading** with a Workers AI vision model in the Worker. Results go to review.
-5. **Real drive times** through a routing API in the Worker. River crossings make straight-line estimates optimistic.
-6. **Lock-screen Live Activity** during a run ("Next: … · 2 of 5").
-7. **Backup restore.** Optional encrypted cloud backup (R2) only if needed. Also move the AI token into the iOS Keychain (`expo-secure-store`).
-8. **Reports** (rides per month, km for reimbursement) if the church wants them.
-9. **Android, later.** Import by reading notifications (catches SMS, RCS chat and WhatsApp).
+1. **Use it on a real Sunday,** with an EAS build on the iPhone:
+   - Note anything the parser flags wrongly, and send a made-up copy of any new text format.
+   - Check that the Message automation runs while locked, and that Siri hears "ChurchRide" reliably.
+2. **Share sheet.** Receive shared texts and screenshots from WhatsApp, Mail and Photos.
+3. **Screenshot reading** with a Workers AI vision model in the Worker. Results go to review.
+4. **Real drive times** through a routing API in the Worker. River crossings make straight-line estimates optimistic.
+5. **Lock-screen Live Activity** during a run ("Next: … · 2 of 5").
+6. **Backup restore.** Optional encrypted cloud backup (R2) only if needed. Also move the AI token into the iOS Keychain (`expo-secure-store`).
+7. **Reports** (rides per month, km for reimbursement) if the church wants them.
+8. **Android, later.** Import by reading notifications (catches SMS, RCS chat and WhatsApp).
 
 ## Open questions
 

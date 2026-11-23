@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 
+import { AppIntentsBridge } from '@/components/app-intents-bridge';
 import { migrate } from '@/db/schema';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -13,6 +14,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SQLiteProvider databaseName="churchride.db" onInit={migrate}>
+        <AppIntentsBridge />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="import" options={{ presentation: 'modal', title: 'Import texts' }} />

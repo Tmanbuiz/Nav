@@ -69,6 +69,15 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 2: Siri and Shortcuts actions already applied. iOS can deliver a queued action more than
+  // once, so each one is recorded in the same transaction as its effect.
+  `
+  CREATE TABLE processed_invocations (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    processed_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

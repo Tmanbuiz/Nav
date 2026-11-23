@@ -1,3 +1,4 @@
+import * as AppIntents from 'expo-app-intents';
 import * as Clipboard from 'expo-clipboard';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
@@ -176,28 +177,55 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Auto-import from Messages">
-        <Card>
-          <Body>One-time setup in the Shortcuts app:</Body>
-          <Body muted>1. Save the church’s texting number as a contact.</Body>
-          <Body muted>2. Shortcuts → Automation → + → Message. Sender: that contact. Choose “Run Immediately”.</Body>
-          <Body muted>3. Add the action “URL Encode” and set it to the Shortcut Input (the message).</Body>
-          <Body muted>4. Add “Open URLs” with the link start below, followed by the URL Encoded Text.</Body>
-          <Body muted size={13}>
-            New assignment texts then open ChurchRide and land in your Inbox for review. If the phone is locked, it
-            finishes when you unlock.
-          </Body>
-          <ButtonRow>
-            <Button
-              small
-              title="Copy link start"
-              onPress={async () => {
-                await Clipboard.setStringAsync(LINK_START);
-                Alert.alert('Copied', LINK_START);
-              }}
-            />
-          </ButtonRow>
-        </Card>
+        {AppIntents.isAvailable() ? (
+          <Card>
+            <Body>One-time setup in the Shortcuts app:</Body>
+            <Body muted>1. Save the church’s texting number as a contact.</Body>
+            <Body muted>2. Shortcuts → Automation → + → Message. Sender: that contact. Choose “Run Immediately”.</Body>
+            <Body muted>3. Add the ChurchRide action “Add Assignment Text” and set Text to the Shortcut Input (the message).</Body>
+            <Body muted size={13}>
+              New assignment texts are saved quietly, even while the phone is locked, and appear in your Inbox the next
+              time you open ChurchRide.
+            </Body>
+          </Card>
+        ) : (
+          <Card>
+            <Body>One-time setup in the Shortcuts app:</Body>
+            <Body muted>1. Save the church’s texting number as a contact.</Body>
+            <Body muted>2. Shortcuts → Automation → + → Message. Sender: that contact. Choose “Run Immediately”.</Body>
+            <Body muted>3. Add the action “URL Encode” and set it to the Shortcut Input (the message).</Body>
+            <Body muted>4. Add “Open URLs” with the link start below, followed by the URL Encoded Text.</Body>
+            <Body muted size={13}>
+              This version opens ChurchRide for each text. Your own build of the app (not Expo Go) adds a quiet “Add
+              Assignment Text” action instead.
+            </Body>
+            <ButtonRow>
+              <Button
+                small
+                title="Copy link start"
+                onPress={async () => {
+                  await Clipboard.setStringAsync(LINK_START);
+                  Alert.alert('Copied', LINK_START);
+                }}
+              />
+            </ButtonRow>
+          </Card>
+        )}
       </Section>
+
+      {AppIntents.isAvailable() ? (
+        <Section title="Siri while driving">
+          <Card>
+            <Body>“Hey Siri, next stop in ChurchRide”</Body>
+            <Body muted>Says who and where is next, and how many stops are left.</Body>
+            <Body>“Hey Siri, picked up in ChurchRide”</Body>
+            <Body muted>
+              Marks the current stop done (also “Dropped off in ChurchRide” after service). It shows in your list the
+              next time you open the app.
+            </Body>
+          </Card>
+        </Section>
+      ) : null}
 
       <Section title="AI reading (optional)">
         <Body muted size={13}>

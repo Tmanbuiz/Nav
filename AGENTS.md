@@ -14,10 +14,12 @@ A personal iPhone app for one church driver. The church's system texts each tran
   - `validate.ts`: manual and AI rides
   - `maps.ts`: Apple and Google links, call and text links
   - `route.ts`: ordering and estimates
+  - `siri.ts`: the stop list published for Siri
   - `time.ts`, `labels.ts`
 - `mobile/src/db/`: SQLite. `schema.ts` (versioned migrations), `settings.ts`, `repo.ts` (all SQL).
-- `mobile/src/services/`: workflows that touch device APIs (geocoding and location, approval, AI client, backup).
-- `mobile/src/app/`: Expo Router screens. `mobile/src/components/`: UI pieces.
+- `mobile/src/services/`: workflows that touch device APIs (geocoding and location, approval, AI client, backup). `intents.ts` applies queued Siri and Shortcuts actions; `app-intents.ts` drains the queue and publishes the stop list.
+- `mobile/src/app/`: Expo Router screens. `mobile/src/components/`: UI pieces, including `app-intents-bridge.tsx`.
+- `mobile/app-intents/`: Swift App Intents (Siri and the Shortcuts action), compiled into the iOS app as an Expo inline module through `expo-app-intents` (alpha).
 - `worker/`: Cloudflare Worker (`src/index.ts` routes and auth, `src/extract.ts` Workers AI call and cleanup).
 
 ## Commands
@@ -55,3 +57,10 @@ Run the tests, typecheck and lint for every package you touched before calling a
    - generate the `Env` type with `npm run types`; don't hand-write it
    - logs must never contain rider text or details
 9. Build roadmap slices thin and end to end, and test on a real Sunday, before widening.
+10. App Intents (`mobile/app-intents/*.swift`) reach JavaScript only through `expo-app-intents`, and the two sides must agree:
+    - dispatch names and params (`addAssignmentText` with `text`; `setTripStatus` with `assignmentId`, `leg`, `status`) match `src/services/intents.ts`
+    - the `stop` catalog's metadata keys match `src/core/siri.ts` and `ChurchRideStops.swift`
+    - delivery is at least once, so each handler records the invocation ID in `processed_invocations` in the same transaction as its change
+    - a dispatch is one-way: Swift can say an action was saved, never that JavaScript applied it
+    - every App Shortcut phrase includes `\(.applicationName)`
+    - CI can't compile Swift. Check Swift changes with an EAS build on a real iPhone.
