@@ -109,6 +109,7 @@ export default function InboxScreen() {
               <Body>
                 {notice.passengerName ?? 'Unknown rider'} · {formatDate(notice.serviceDate)}
               </Body>
+              {notice.details ? <Body>{notice.details}</Body> : null}
               <Body muted size={13}>
                 {notice.rawText.slice(0, 220)}
                 {notice.rawText.length > 220 ? '…' : ''}
@@ -158,6 +159,7 @@ export default function InboxScreen() {
                 <Body>{ride.pickupAddress ?? 'No address'}</Body>
                 {ride.phone ? <Body muted>{ride.phone}</Body> : null}
                 {ride.source === 'ai' ? <Pill tone="warning" text="Read by AI" /> : null}
+                {ride.source === 'screenshot' ? <Pill tone="warning" text="From a screenshot" /> : null}
                 <IssueList issues={ride.issues} />
                 <ButtonRow>
                   <Button

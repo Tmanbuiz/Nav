@@ -2,6 +2,10 @@
  * Decides what an import does, without touching storage: create new assignments,
  * update changed ones, skip duplicates, raise change notices, ignore other texts.
  * The storage layer applies the plan. Everything new or changed lands in review.
+ *
+ * Text read from a screenshot can be misread, so it is trusted less: its rides carry a
+ * "screenshot" flag, and it never overwrites a saved value. It may only fill in what a saved
+ * ride is missing; any other difference becomes a notice.
  */
 import type { Assignment, Issue, ParseResult, PossibleChange } from './parser/assignmentParser';
 
@@ -40,8 +44,27 @@ export type ImportAction =
       changes: string[];
     }
   | { type: 'duplicate'; existingId: string | null; passengerName: string | null }
-  | { type: 'notice'; hint: PossibleChange['hint']; existingId: string | null; change: PossibleChange }
+  | {
+      type: 'notice';
+      hint: PossibleChange['hint'];
+      existingId: string | null;
+      change: PossibleChange;
+      /** What to check, when ChurchRide knows: e.g. what a screenshot shows differently. */
+      details?: string;
+    }
   | { type: 'ignored'; raw: string };
+
+export interface PlanOptions {
+  /** The text was read from a screenshot (see the note at the top). */
+  fromScreenshot?: boolean;
+}
+
+export const SCREENSHOT_ISSUE: Issue = {
+  field: 'message',
+  severity: 'review',
+  code: 'screenshot',
+  message: 'Read from a screenshot: check the name, phone number, time and address against it',
+};
 
 export interface ImportSummary {
   created: number;
@@ -56,10 +79,25 @@ export interface ImportPlan {
   summary: ImportSummary;
 }
 
+export const EMPTY_SUMMARY: ImportSummary = { created: 0, changed: 0, duplicates: 0, notices: 0, ignored: 0 };
+
+/** Two imports' counts together, e.g. several texts or screenshots shared at once. */
+export function addSummaries(a: ImportSummary | null, b: ImportSummary): ImportSummary {
+  if (!a) return b;
+  return {
+    created: a.created + b.created,
+    changed: a.changed + b.changed,
+    duplicates: a.duplicates + b.duplicates,
+    notices: a.notices + b.notices,
+    ignored: a.ignored + b.ignored,
+  };
+}
+
 export function planImport(
   results: ParseResult[],
   existing: ExistingAssignment[],
   regulars: KnownRegular[],
+  opts: PlanOptions = {},
 ): ImportPlan {
   const byKey = new Map(existing.filter((e) => e.dedupeKey).map((e) => [e.dedupeKey as string, e]));
   const regularByPhone = new Map(regulars.filter((r) => r.phone).map((r) => [r.phone as string, r]));
@@ -95,7 +133,7 @@ export function planImport(
     }
 
     const regular = result.phone ? regularByPhone.get(result.phone) : undefined;
-    const issues = result.issues.filter(
+    const parsedIssues = result.issues.filter(
       (i) =>
         !(
           i.code === 'place-address' &&
@@ -103,12 +141,39 @@ export function planImport(
           sameAddress(regular.pickupAddress, result.pickupAddress)
         ),
     );
+    const issues = opts.fromScreenshot ? [SCREENSHOT_ISSUE, ...parsedIssues] : parsedIssues;
     const regularId = regular?.id ?? null;
     const current = key ? byKey.get(key) : undefined;
 
     if (!current) {
       actions.push({ type: 'create', assignment: result, regularId, issues });
       continue;
+    }
+
+    if (opts.fromScreenshot) {
+      // Only what the picture actually shows counts: a message cut off at the edge of the
+      // screen says nothing about the fields it lost.
+      const shown = fieldChanges(current, result).filter((c) => !c.newEmpty);
+      if (!shown.length) {
+        actions.push({ type: 'duplicate', existingId: current.id, passengerName: result.passengerName });
+        continue;
+      }
+      // A complete reading may fill in what a saved ride is missing (say, from an earlier
+      // cut-off screenshot). Anything else would overwrite a value, so it becomes a notice.
+      const fillsGapsOnly =
+        current.status !== 'cancelled' &&
+        shown.every((c) => c.savedEmpty) &&
+        !result.issues.some((i) => i.severity === 'error');
+      if (!fillsGapsOnly) {
+        actions.push({
+          type: 'notice',
+          hint: 'update',
+          existingId: current.id,
+          change: asPossibleChange(result),
+          details: screenshotMismatch(current, shown.map((c) => c.field)),
+        });
+        continue;
+      }
     }
 
     const changes = describeChanges(current, result);
@@ -147,20 +212,67 @@ export function planImport(
   };
 }
 
-function describeChanges(current: ExistingAssignment, next: Assignment): string[] {
-  const changes: string[] = [];
-  if (current.status === 'cancelled') changes.push('it was cancelled before');
-  if (!sameName(current.passengerName, next.passengerName)) changes.push('name');
-  if ((current.persons ?? null) !== (next.persons ?? null)) changes.push('number of persons');
-  if (
-    (current.windowStart ?? null) !== (next.pickupWindow?.start ?? null) ||
-    (current.windowEnd ?? null) !== (next.pickupWindow?.end ?? null)
-  ) {
-    changes.push('pickup time');
-  }
-  if ((current.transportType ?? null) !== (next.transportType ?? null)) changes.push('transport type');
-  if (!sameAddress(current.pickupAddress, next.pickupAddress)) changes.push('pickup address');
+const CANCELLED_BEFORE = 'it was cancelled before';
+
+interface FieldChange {
+  field: string;
+  /** The saved ride has no value here. */
+  savedEmpty: boolean;
+  /** The new copy has no value here. */
+  newEmpty: boolean;
+}
+
+function fieldChanges(current: ExistingAssignment, next: Assignment): FieldChange[] {
+  const changes: FieldChange[] = [];
+  const empty = (v: unknown) => v === null || v === undefined || v === '';
+  const check = (field: string, saved: unknown, incoming: unknown, same: boolean) => {
+    if (!same) changes.push({ field, savedEmpty: empty(saved), newEmpty: empty(incoming) });
+  };
+  check('name', current.passengerName, next.passengerName, sameName(current.passengerName, next.passengerName));
+  check('number of persons', current.persons, next.persons, (current.persons ?? null) === (next.persons ?? null));
+  check(
+    'pickup time',
+    current.windowStart,
+    next.pickupWindow,
+    (current.windowStart ?? null) === (next.pickupWindow?.start ?? null) &&
+      (current.windowEnd ?? null) === (next.pickupWindow?.end ?? null),
+  );
+  check('transport type', current.transportType, next.transportType, (current.transportType ?? null) === (next.transportType ?? null));
+  check('pickup address', current.pickupAddress, next.pickupAddress, sameAddress(current.pickupAddress, next.pickupAddress));
   return changes;
+}
+
+function describeChanges(current: ExistingAssignment, next: Assignment): string[] {
+  const changes = fieldChanges(current, next).map((c) => c.field);
+  return current.status === 'cancelled' ? [CANCELLED_BEFORE, ...changes] : changes;
+}
+
+function screenshotMismatch(current: ExistingAssignment, fields: string[]): string {
+  const parts = [`The screenshot doesn’t match the saved ride: ${joinList(fields)}.`];
+  if (current.status === 'cancelled') parts.push('This ride was cancelled.');
+  parts.push('The saved ride wasn’t changed. Open it to compare, and edit it if the screenshot is right.');
+  return parts.join(' ');
+}
+
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+function asPossibleChange(a: Assignment): PossibleChange {
+  return {
+    kind: 'possible-change',
+    hint: 'update',
+    fields: {
+      passengerName: a.passengerName,
+      phone: a.phone,
+      serviceDate: a.serviceDate,
+      pickupWindow: a.pickupWindow,
+      pickupAddress: a.pickupAddress,
+      dedupeKey: a.dedupeKey,
+    },
+    raw: a.raw,
+  };
 }
 
 const STREET_WORDS: Record<string, string> = {

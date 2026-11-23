@@ -208,6 +208,51 @@ describe('planImport', () => {
     expect(plain?.type === 'create' && plain.issues.map((i) => i.code)).toEqual(['place-address']);
   });
 
+  test('a screenshot flags new rides, and a difference becomes a notice instead of an edit', () => {
+    const screenshot = parseAssignmentMessages(
+      [
+        sms('John Sample', '+15065550102'),
+        sms('Jane Example', '+15065550101', '10:00 AM - 10:15 AM', '102 Example Street, Fredericton, NB'),
+      ].join('\n'),
+    );
+    const plan = planImport(screenshot, existing, [], { fromScreenshot: true });
+    expect(plan.actions.map((a) => a.type)).toEqual(['create', 'notice']);
+    const created = plan.actions[0];
+    expect(created?.type === 'create' && created.issues.map((i) => i.code)).toEqual(['screenshot']);
+    const notice = plan.actions[1];
+    expect(notice).toEqual(expect.objectContaining({ type: 'notice', hint: 'update', existingId: 'a1' }));
+    expect(notice?.type === 'notice' && notice.details).toBe(
+      'The screenshot doesn’t match the saved ride: pickup time and pickup address. ' +
+        'The saved ride wasn’t changed. Open it to compare, and edit it if the screenshot is right.',
+    );
+    expect(plan.summary).toEqual({ created: 1, changed: 0, duplicates: 0, notices: 1, ignored: 0 });
+
+    // A screenshot matching the saved ride changes nothing.
+    const same = planImport([parseAssignmentSms(sms('Jane Example', '+15065550101'))], existing, [], { fromScreenshot: true });
+    expect(same.actions[0]?.type).toBe('duplicate');
+  });
+
+  test('a cut-off screenshot adds nothing, and a complete one fills in what a cut-off one missed', () => {
+    const full = sms('Jane Example', '+15065550101');
+    const cutOff = full.slice(0, full.indexOf('Pickup Time:'));
+    expect(planImport([parseAssignmentSms(cutOff)], existing, [], { fromScreenshot: true }).actions[0]?.type).toBe(
+      'duplicate',
+    );
+
+    const savedFromCutOff: ExistingAssignment = {
+      ...existing[0]!,
+      windowStart: null,
+      windowEnd: null,
+      transportType: null,
+      pickupAddress: null,
+      status: 'review',
+    };
+    const filled = planImport([parseAssignmentSms(full)], [savedFromCutOff], [], { fromScreenshot: true }).actions[0];
+    expect(filled?.type).toBe('changed');
+    expect(filled?.type === 'changed' && filled.changes).toEqual(['pickup time', 'transport type', 'pickup address']);
+    expect(filled?.type === 'changed' && filled.issues.map((i) => i.code)).toEqual(['screenshot', 'changed']);
+  });
+
   test('sameAddress ignores case, punctuation, street words and province spelling', () => {
     expect(sameAddress('100 Example Street, Fredericton, New Brunswick, Canada', '100 example st fredericton nb')).toBe(true);
     expect(sameAddress('100 Example Street', '102 Example Street')).toBe(false);

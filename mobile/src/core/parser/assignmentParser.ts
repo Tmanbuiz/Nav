@@ -48,7 +48,8 @@ export type IssueCode =
   | 'other-province'
   | 'far-from-church'
   | 'changed'
-  | 'ai-extracted';
+  | 'ai-extracted'
+  | 'screenshot';
 
 export interface Issue {
   field: string;

@@ -11,6 +11,7 @@ Updated 2026-11-23. This replaces the earlier 12-phase Codex roadmap with thin, 
 - **Regulars.** Riders are matched by phone number. Their exact pickup spot is saved once, by standing at the door and tapping "Save where I am now".
 - **Maps.** Apple Maps by default (multi-stop links, iOS 18.4+), Google Maps as an option. Neither reorders stops, so ChurchRide suggests the order and you can adjust it.
 - **Siri and Shortcuts through `expo-app-intents` (alpha).** Swift intents can't call JavaScript directly, so they queue each action on the phone and the app applies it the next time it runs, exactly once. Siri reads the run from a small stop list the app publishes, so it can answer while the app is closed.
+- **Share sheet through `expo-sharing`'s share extension (experimental).** It saves what was shared and opens the app, which imports it. Screenshots are read on the phone with Apple's Vision framework instead of a cloud AI model: it's private, free and works offline. Text from a picture is trusted less: its rides are flagged, and it never overwrites a saved value.
 - **Safety checks:**
   - a building instead of a street address
   - an address in another province, or a pickup more than 60 km from the church (held once, until approved again)
@@ -43,18 +44,24 @@ Updated 2026-11-23. This replaces the earlier 12-phase Codex roadmap with thin, 
 - **Tests:** each action applies once even when delivered twice; the stop list Siri reads.
 - The Swift hasn't been compiled yet: CI can't, so the first EAS build is the check.
 
+## Built, waiting for a test on the iPhone (v3)
+
+- **Share sheet:** share texts, or up to 10 screenshots, from WhatsApp, Mail, Photos or any app. They're imported into the Inbox for review.
+- **Screenshot reading on the phone:** rides from pictures are marked "From a screenshot". A picture that differs from a saved ride becomes a notice saying what differs; it can only fill in details the ride is missing.
+- **Tests:** sorting what's shared, a share arriving mid-import, screenshot flags and notices, storage of notice details.
+- Needs the first EAS build to register the App Group and compile the Swift text reader.
+
 ## Next
 
 1. **Use it on a real Sunday,** with an EAS build on the iPhone:
    - Note anything the parser flags wrongly, and send a made-up copy of any new text format.
    - Check that the Message automation runs while locked, and that Siri hears "ChurchRide" reliably.
-2. **Share sheet.** Receive shared texts and screenshots from WhatsApp, Mail and Photos.
-3. **Screenshot reading** with a Workers AI vision model in the Worker. Results go to review.
-4. **Real drive times** through a routing API in the Worker. River crossings make straight-line estimates optimistic.
-5. **Lock-screen Live Activity** during a run ("Next: … · 2 of 5").
-6. **Backup restore.** Optional encrypted cloud backup (R2) only if needed. Also move the AI token into the iOS Keychain (`expo-secure-store`).
-7. **Reports** (rides per month, km for reimbursement) if the church wants them.
-8. **Android, later.** Import by reading notifications (catches SMS, RCS chat and WhatsApp).
+   - Share a screenshot of a real assignment text and check how well it's read.
+2. **Real drive times** through a routing API in the Worker. River crossings make straight-line estimates optimistic.
+3. **Lock-screen Live Activity** during a run ("Next: … · 2 of 5").
+4. **Backup restore.** Optional encrypted cloud backup (R2) only if needed. Also move the AI token into the iOS Keychain (`expo-secure-store`).
+5. **Reports** (rides per month, km for reimbursement) if the church wants them.
+6. **Android, later.** Import by reading notifications (catches SMS, RCS chat and WhatsApp). `expo-sharing` already supports Android share intents when this comes.
 
 ## Open questions
 

@@ -68,7 +68,8 @@ async function importTextNow(
     expectedProvince: settings.province.trim() || undefined,
   });
   const { existing, regulars } = await loadImportContext(db);
-  return applyImportPlan(db, planImport(results, existing, regulars), source, idempotencyKey);
+  const plan = planImport(results, existing, regulars, { fromScreenshot: source === 'screenshot' });
+  return applyImportPlan(db, plan, source, idempotencyKey);
 }
 
 async function importAiRidesNow(db: SQLiteDatabase, rides: AiRide[], raw: string): Promise<ImportSummary> {
