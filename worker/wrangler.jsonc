@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "churchride-ai",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-23",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Workers AI through a binding: no outside AI provider or key needed.
+  // It always runs on Cloudflare, even in local dev (tests use a stand-in model).
+  "ai": { "binding": "AI", "remote": true },
+
+  // Plenty for one driver; stops a leaked token from running up Workers AI usage.
+  "ratelimits": [
+    {
+      "name": "LIMITER",
+      "namespace_id": "62741",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+
+  "vars": {
+    // A Workers AI text model that supports JSON mode. Change it here; no code change needed.
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+
+  // The app's shared secret. Set it with: npx wrangler secret put APP_TOKEN
+  "secrets": { "required": ["APP_TOKEN"] },
+
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}
