@@ -11,7 +11,14 @@
       "bundleIdentifier": "com.wiantribe.churchride",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleSpokenName": "Church Ride",
+        "INAlternativeAppNames": [
+          {
+            "INAlternativeAppName": "Church Ride",
+            "INAlternativeAppNamePronunciationHint": "church ride"
+          }
+        ]
       }
     },
     "android": {
@@ -45,11 +52,17 @@
         {
           "locationWhenInUsePermission": "ChurchRide uses your location only when you tap “Save where I am now”, to remember a rider’s exact pickup spot."
         }
-      ]
+      ],
+      "expo-app-intents"
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": true,
+      "inlineModules": {
+        "watchedDirectories": [
+          "app-intents"
+        ]
+      }
     }
   }
 }

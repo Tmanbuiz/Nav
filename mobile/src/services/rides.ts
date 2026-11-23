@@ -13,6 +13,7 @@ import {
   applyImportPlan,
   confirmRide,
   getRide,
+  isInvocationProcessed,
   loadImportContext,
   setRideGeo,
   setRideIssues,
@@ -38,15 +39,28 @@ function serialized<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export function importText(db: SQLiteDatabase, text: string, source: RideSource): Promise<ImportSummary> {
-  return serialized(() => importTextNow(db, text, source));
+export function importText(
+  db: SQLiteDatabase,
+  text: string,
+  source: RideSource,
+  idempotencyKey?: { id: string; name: string },
+): Promise<ImportSummary> {
+  return serialized(() => importTextNow(db, text, source, idempotencyKey));
 }
 
 export function importAiRides(db: SQLiteDatabase, rides: AiRide[], raw: string): Promise<ImportSummary> {
   return serialized(() => importAiRidesNow(db, rides, raw));
 }
 
-async function importTextNow(db: SQLiteDatabase, text: string, source: RideSource): Promise<ImportSummary> {
+const NOTHING: ImportSummary = { created: 0, changed: 0, duplicates: 0, notices: 0, ignored: 0 };
+
+async function importTextNow(
+  db: SQLiteDatabase,
+  text: string,
+  source: RideSource,
+  idempotencyKey?: { id: string; name: string },
+): Promise<ImportSummary> {
+  if (idempotencyKey && (await isInvocationProcessed(db, idempotencyKey.id))) return NOTHING;
   const settings = await loadSettings(db);
   const results = parseAssignmentMessages(text, {
     expectedDriverName: settings.driverName.trim() || undefined,
@@ -54,7 +68,7 @@ async function importTextNow(db: SQLiteDatabase, text: string, source: RideSourc
     expectedProvince: settings.province.trim() || undefined,
   });
   const { existing, regulars } = await loadImportContext(db);
-  return applyImportPlan(db, planImport(results, existing, regulars), source);
+  return applyImportPlan(db, planImport(results, existing, regulars), source, idempotencyKey);
 }
 
 async function importAiRidesNow(db: SQLiteDatabase, rides: AiRide[], raw: string): Promise<ImportSummary> {

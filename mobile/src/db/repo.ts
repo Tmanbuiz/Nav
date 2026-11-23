@@ -14,7 +14,7 @@ import type { RideFields } from '@/core/validate';
 
 import { newId, notifyChanged, nowStamp } from './events';
 
-export type RideSource = 'paste' | 'link' | 'manual' | 'ai';
+export type RideSource = 'paste' | 'link' | 'shortcut' | 'manual' | 'ai';
 export type TripStatus = 'pending' | 'done' | 'no-show';
 
 export interface Ride {
@@ -59,6 +59,8 @@ export interface Trip {
   leg: Leg;
   status: TripStatus;
   sortOrder: number | null;
+  /** When this trip's status or order last changed (ISO). */
+  updatedAt: string;
   ride: Ride;
   regular: Regular | null;
 }
@@ -207,7 +209,7 @@ export async function listUpcomingDates(db: SQLiteDatabase, fromDate: string): P
 
 export async function listTripsForDate(db: SQLiteDatabase, date: string): Promise<Trip[]> {
   const rows = await db.getAllAsync<Row>(
-    `SELECT a.*, t.leg AS trip_leg, t.status AS trip_status, t.sort_order AS trip_sort,
+    `SELECT a.*, t.leg AS trip_leg, t.status AS trip_status, t.sort_order AS trip_sort, t.updated_at AS trip_updated,
             r.id AS r_id, r.name AS r_name, r.phone AS r_phone, r.pickup_address AS r_pickup_address,
             r.spot_lat AS r_spot_lat, r.spot_lng AS r_spot_lng, r.spot_saved AS r_spot_saved,
             r.notes AS r_notes, r.created_at AS r_created_at, r.updated_at AS r_updated_at
@@ -223,6 +225,7 @@ export async function listTripsForDate(db: SQLiteDatabase, date: string): Promis
     leg: row.trip_leg === 'from-church' ? 'from-church' : 'to-church',
     status: (str(row.trip_status) as TripStatus | null) ?? 'pending',
     sortOrder: num(row.trip_sort),
+    updatedAt: String(row.trip_updated ?? ''),
     ride: toRide(row),
     regular: row.r_id ? toRegular(row, 'r_') : null,
   }));
@@ -260,9 +263,12 @@ export async function applyImportPlan(
   db: SQLiteDatabase,
   plan: ImportPlan,
   source: RideSource,
+  /** A Siri/Shortcuts invocation ID, recorded with the import so a replay changes nothing. */
+  idempotencyKey?: { id: string; name: string },
 ): Promise<ImportSummary> {
   const now = nowStamp();
   await db.withTransactionAsync(async () => {
+    if (idempotencyKey) await recordInvocation(db, idempotencyKey.id, idempotencyKey.name, now);
     for (const action of plan.actions) {
       if (action.type === 'create' || action.type === 'changed') {
         const a = action.assignment;
@@ -459,6 +465,51 @@ export async function setTripOrder(db: SQLiteDatabase, leg: Leg, orderedAssignme
     }
   });
   notifyChanged();
+}
+
+// ---------- Siri and Shortcuts actions ----------
+
+export async function isInvocationProcessed(db: SQLiteDatabase, id: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ id: string }>('SELECT id FROM processed_invocations WHERE id = ?', id);
+  return row !== null;
+}
+
+async function recordInvocation(db: SQLiteDatabase, id: string, name: string, at: string): Promise<void> {
+  await db.runAsync('INSERT INTO processed_invocations (id, name, processed_at) VALUES (?, ?, ?)', [id, name, at]);
+}
+
+export type OnceResult = 'applied' | 'already-applied' | 'no-such-trip';
+
+/** Sets a trip's status for a Siri action exactly once, recording the action in the same transaction. */
+export async function setTripStatusOnce(
+  db: SQLiteDatabase,
+  args: { assignmentId: string; leg: Leg; status: TripStatus; invocationId: string },
+): Promise<OnceResult> {
+  let result: OnceResult = 'applied';
+  await db.withTransactionAsync(async () => {
+    if (await isInvocationProcessed(db, args.invocationId)) {
+      result = 'already-applied';
+      return;
+    }
+    const now = nowStamp();
+    const trip = await db.getFirstAsync<{ status: string }>(
+      'SELECT status FROM trips WHERE assignment_id = ? AND leg = ?',
+      [args.assignmentId, args.leg],
+    );
+    if (!trip) {
+      result = 'no-such-trip';
+    } else {
+      await db.runAsync('UPDATE trips SET status = ?, updated_at = ? WHERE assignment_id = ? AND leg = ?', [
+        args.status,
+        now,
+        args.assignmentId,
+        args.leg,
+      ]);
+    }
+    await recordInvocation(db, args.invocationId, 'setTripStatus', now);
+  });
+  if (result === 'applied') notifyChanged();
+  return result;
 }
 
 // ---------- Notices ----------

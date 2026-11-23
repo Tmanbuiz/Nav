@@ -2,6 +2,21 @@
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS_LONG = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 
 export function todayISO(now: Date = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -40,6 +55,22 @@ export function formatDate(iso: string | null | undefined): string {
   const d = iso ? parseISODate(iso) : null;
   if (!d) return 'No date';
   return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** "Sunday, November 22", for Siri to say. */
+export function formatDateLong(iso: string | null | undefined): string {
+  const d = iso ? parseISODate(iso) : null;
+  if (!d) return '';
+  return `${DAYS_LONG[d.getDay()]}, ${MONTHS_LONG[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** "between 9:30 and 9:45 AM" or "at 9:30 AM", for Siri to say. Empty when unknown. */
+export function formatSpokenWindow(start: string | null | undefined, end: string | null | undefined): string {
+  if (!isHHMM(start)) return '';
+  if (!isHHMM(end) || end === start) return `at ${formatClock(start)}`;
+  const s = formatClock(start);
+  const e = formatClock(end);
+  return s.slice(-2) === e.slice(-2) ? `between ${s.slice(0, -3)} and ${e}` : `between ${s} and ${e}`;
 }
 
 export function isHHMM(s: string | null | undefined): s is string {

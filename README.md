@@ -25,6 +25,7 @@ A personal iPhone app for church transportation runs. It turns the church's assi
    - **Start route**: every pickup in order, ending at church, in Maps
    - per stop: **Call**, **On my way**, **I'm outside**, **Picked up** and **No-show**
    - the trips home after service
+6. While driving, ask **Siri** for the next stop and tell it when someone is picked up, without touching the phone.
 
 ## Try it now with Expo Go (no build needed)
 
@@ -36,7 +37,7 @@ npm install
 npx expo start
 ```
 
-Scan the QR code with the iPhone camera. Expo Go is good for checking the screens, paste import, storage and the Maps links. The `churchride://` link the Shortcut uses only works in your own build (next section).
+Scan the QR code with the iPhone camera. Expo Go is good for checking the screens, paste import, storage and the Maps links. The Shortcut action, the `churchride://` link and Siri only work in your own build (next section).
 
 ## Put it on your iPhone (EAS + TestFlight)
 
@@ -64,12 +65,22 @@ Open **Settings** and fill in:
 
 ## Auto-import from Messages (Shortcuts)
 
+This needs your own build of the app, not Expo Go.
+
 1. Save the church's texting number as a contact.
 2. In the Shortcuts app, go to **Automation** and tap **+**. Choose **Message**, set Sender to that contact, and pick **Run Immediately**.
-3. Add the action **URL Encode** and set it to the Shortcut Input (the message).
-4. Add **Open URLs** with `churchride://import?text=` followed by the URL Encoded Text.
+3. Add the ChurchRide action **Add Assignment Text** and set Text to the Shortcut Input (the message).
 
-New assignment texts then open ChurchRide and land in the Inbox. If the phone is locked, the import finishes when you unlock it. A silent version that doesn't open the app (App Intents) is next on the roadmap.
+New assignment texts are then saved quietly, without opening the app and even while the phone is locked. They show up in the Inbox, for review, the next time you open ChurchRide. Each text waits in a queue on the phone until then and is imported only once.
+
+The older way still works, but it opens the app for every text: **URL Encode** the Shortcut Input, then **Open URLs** with `churchride://import?text=` followed by the URL Encoded Text.
+
+## Siri while driving
+
+This also needs your own build. The phrases work as soon as the app is installed; Siri knows your stops once you've approved rides in the app.
+
+- **"Hey Siri, next stop in ChurchRide"** says who and where is next, the pickup window, and how many stops are left. On a day without rides, it tells you when the next ones are.
+- **"Hey Siri, picked up in ChurchRide"** (or **"dropped off in ChurchRide"** after service) marks the current stop done. Siri moves on to the next stop straight away, and the app's list catches up the next time it opens. If you change that stop in the app afterwards, the app's change wins.
 
 ## Optional: AI reading on Cloudflare
 
@@ -80,6 +91,8 @@ For texts in a format ChurchRide doesn't know, the app can ask your own Cloudfla
 - Rider details stay on the phone (SQLite). There are no accounts and no cloud database.
 - **This repo is public.** Never commit real rider names, numbers or addresses. The tests use made-up data.
 - AI reading only runs when you tap **Read with AI** on a text. That text goes only to your Worker and Workers AI. The Worker logs counts and timings, never the text.
+- For Siri, the app keeps a short list of the next run's stops (names, addresses, pickup windows) in the phone's app storage. It's hidden from Spotlight.
+- Siri answers while the phone is locked, so it works hands-free, but someone holding your locked phone could also ask it for the next stop. To require Face ID first, add `static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication` to `NextStopIntent` and `MarkStopDoneIntent` in `mobile/app-intents/`.
 - **Settings → Export backup** writes a file with rider details (but not the AI token). Keep it private.
 
 ## Development
@@ -89,4 +102,4 @@ cd mobile && npm test && npx tsc --noEmit && npx expo lint
 cd worker && npm test && npx tsc --noEmit
 ```
 
-GitHub Actions runs the same checks on every pull request.
+GitHub Actions runs the same checks on every pull request. They don't compile the Swift in `mobile/app-intents/`; an EAS build does.
