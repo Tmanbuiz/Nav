@@ -1,0 +1,20 @@
+{
+  "name": "churchride-ai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ChurchRide's Cloudflare Worker: reads assignment texts the phone's parser can't, using Workers AI.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.9.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.166.0"
+  }
+}
