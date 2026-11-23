@@ -78,6 +78,10 @@ const MIGRATIONS: string[] = [
     processed_at TEXT NOT NULL
   );
   `,
+  // 3: What a notice asks you to check, e.g. what a screenshot shows differently from a saved ride.
+  `
+  ALTER TABLE notices ADD COLUMN details TEXT;
+  `,
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {

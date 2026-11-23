@@ -12,6 +12,7 @@ import { checkAi } from '@/services/ai';
 import { shareBackup } from '@/services/backup';
 import { geocode } from '@/services/geo';
 import { openExternal } from '@/services/open';
+import { shareSheetAvailable } from '@/services/share';
 
 const LINK_START = 'churchride://import?text=';
 
@@ -222,6 +223,21 @@ export default function SettingsScreen() {
             <Body muted>
               Marks the current stop done (also “Dropped off in ChurchRide” after service). It shows in your list the
               next time you open the app.
+            </Body>
+          </Card>
+        </Section>
+      ) : null}
+
+      {shareSheetAvailable() ? (
+        <Section title="Share to ChurchRide">
+          <Card>
+            <Body>
+              In WhatsApp, Mail or Photos, tap Share and choose ChurchRide. Texts go to the Inbox, and screenshots of
+              assignment texts are read on this phone first.
+            </Body>
+            <Body muted>
+              Rides from screenshots are marked so you check them against the picture. A screenshot never overwrites
+              details you already have; if it shows something different, you get a notice instead.
             </Body>
           </Card>
         </Section>

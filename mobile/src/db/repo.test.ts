@@ -10,6 +10,7 @@ import {
   countInbox,
   exportAll,
   getRegular,
+  getRide,
   isInvocationProcessed,
   listOpenNotices,
   listRegulars,
@@ -68,7 +69,7 @@ test('migrations run once and are idempotent', async () => {
   const db = await setup();
   await migrate(db);
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  expect(version?.user_version).toBe(2);
+  expect(version?.user_version).toBe(3);
 });
 
 test('import → review → approve → today’s trips, end to end', async () => {
@@ -165,6 +166,33 @@ test('Siri and Shortcut actions apply once, even when delivered twice', async ()
   const gone = { ...pickedUp, assignmentId: 'no-such-ride', invocationId: 'action-3' };
   expect(await setTripStatusOnce(db, gone)).toBe('no-such-trip');
   expect(await isInvocationProcessed(db, 'action-3')).toBe(true);
+});
+
+test('a screenshot that differs from a saved ride leaves it alone and stores a notice saying what differs', async () => {
+  const db = await setup();
+  await importText(db, JANE, 'paste');
+  const [jane] = await listRidesByStatus(db, 'review');
+  const other = sms('Jane Example', '+15065550101', '102 Example Street, Fredericton, NB', 'two-way', '8:30 AM - 9:45 AM');
+
+  expect(await importText(db, other, 'screenshot')).toEqual({ created: 0, changed: 0, duplicates: 0, notices: 1, ignored: 0 });
+  const ride = await getRide(db, jane!.id);
+  expect(ride?.pickupAddress).toBe('100 Example Street, Fredericton, NB, Canada');
+  expect(ride?.windowStart).toBe('09:30');
+  const [notice] = await listOpenNotices(db);
+  expect(notice).toEqual(
+    expect.objectContaining({ hint: 'update', assignmentId: jane!.id, passengerName: 'Jane Example', serviceDate: DATE }),
+  );
+  expect(notice?.details).toBe(
+    'The screenshot doesn’t match the saved ride: pickup time and pickup address. ' +
+      'The saved ride wasn’t changed. Open it to compare, and edit it if the screenshot is right.',
+  );
+  expect(notice?.rawText).toBe(other);
+
+  // A new rider in a screenshot is saved for review, marked as read from a picture.
+  expect((await importText(db, JOHN, 'screenshot')).created).toBe(1);
+  const john = (await listRidesByStatus(db, 'review')).find((r) => r.passengerName === 'John Sample');
+  expect(john?.source).toBe('screenshot');
+  expect(john?.issues.map((i) => i.code)).toEqual(['screenshot']);
 });
 
 test('a saved door spot is used for routing and cleared when the address changes', async () => {

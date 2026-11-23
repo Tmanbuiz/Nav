@@ -46,7 +46,20 @@
         }
       ],
       "expo-sqlite",
-      "expo-sharing",
+      [
+        "expo-sharing",
+        {
+          "ios": {
+            "enabled": true,
+            "extensionBundleIdentifier": "com.wiantribe.churchride.ShareExtension",
+            "appGroupId": "group.com.wiantribe.churchride",
+            "activationRule": {
+              "supportsText": true,
+              "supportsImageWithMaxCount": 10
+            }
+          }
+        }
+      ],
       [
         "expo-location",
         {
@@ -60,7 +73,8 @@
       "reactCompiler": true,
       "inlineModules": {
         "watchedDirectories": [
-          "app-intents"
+          "app-intents",
+          "screenshot-text"
         ]
       }
     }

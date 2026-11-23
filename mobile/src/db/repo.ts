@@ -14,7 +14,7 @@ import type { RideFields } from '@/core/validate';
 
 import { newId, notifyChanged, nowStamp } from './events';
 
-export type RideSource = 'paste' | 'link' | 'shortcut' | 'manual' | 'ai';
+export type RideSource = 'paste' | 'link' | 'shortcut' | 'share' | 'screenshot' | 'manual' | 'ai';
 export type TripStatus = 'pending' | 'done' | 'no-show';
 
 export interface Ride {
@@ -72,6 +72,8 @@ export interface Notice {
   passengerName: string | null;
   serviceDate: string | null;
   rawText: string;
+  /** What to check, when ChurchRide knows. */
+  details: string | null;
   resolved: boolean;
   createdAt: string;
 }
@@ -141,6 +143,7 @@ function toNotice(row: Row): Notice {
     passengerName: str(row.passenger_name),
     serviceDate: str(row.service_date),
     rawText: String(row.raw_text ?? ''),
+    details: str(row.details),
     resolved: row.resolved === 1,
     createdAt: String(row.created_at ?? ''),
   };
@@ -306,8 +309,8 @@ export async function applyImportPlan(
         }
       } else if (action.type === 'notice') {
         await db.runAsync(
-          `INSERT INTO notices (id, hint, assignment_id, passenger_name, service_date, raw_text, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO notices (id, hint, assignment_id, passenger_name, service_date, raw_text, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             newId(),
             action.hint,
@@ -315,6 +318,7 @@ export async function applyImportPlan(
             action.change.fields.passengerName,
             action.change.fields.serviceDate,
             action.change.raw,
+            action.details ?? null,
             now,
           ],
         );
